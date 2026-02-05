@@ -1,31 +1,28 @@
 export default async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'GET, OPTIONS');
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
 
   if (req.method === 'OPTIONS') {
     return res.status(200).end();
   }
 
-  if (req.method !== 'GET') {
-    return res.status(405).json({error: 'Method Not Allowed'});
-  }
-
   try {
-    const response = await fetch('https://www.reddit.com/best.json?limit=10', {
+    const redditRes = await fetch('https://www.reddit.com/best.json?limit=10', {
       headers: {
-        'User-Agent': 'BloggetApp/0.1 (educational project by yuriysw)',
+        'User-Agent': 'RedditProxy/1.0',
       },
     });
 
-    if (!response.ok) {
-      throw new Error(`Reddit API: ${response.status}`);
+    if (!redditRes.ok) {
+      return res
+        .status(redditRes.status)
+        .json({error: 'Reddit error', status: redditRes.status});
     }
 
-    const data = await response.json();
+    const data = await redditRes.json();
     res.status(200).json(data);
-  } catch (error) {
-    console.error('Proxy error:', error);
-    res.status(500).json({error: 'Failed to fetch Reddit posts'});
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({error: 'Proxy failed', details: err.message});
   }
 }
