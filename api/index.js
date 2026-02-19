@@ -16,7 +16,8 @@ export default async function handler(req, res) {
 
     const response = await fetch(redditUrl, {
       headers: {
-        'User-Agent': 'blogget-proxy/1.0',
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)',
+        Accept: 'application/json',
       },
     });
 
