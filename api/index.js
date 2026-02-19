@@ -10,13 +10,14 @@ export default async function handler(req, res) {
   try {
     const url = new URL(req.url, 'http://localhost');
 
-    const redditUrl = `https://old.reddit.com${url.pathname}${url.search}`;
+    const pikabuUrl = `https://pikabu.ru${path}${url.search}`;
 
-    console.log('Proxying to:', redditUrl);
+    console.log('Proxying to:', pikabuUrl);
 
-    const response = await fetch(redditUrl, {
+    const response = await fetch(pikabuUrl, {
       headers: {
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)',
+        'User-Agent':
+          'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/133.0.0.0 Safari/537.36',
         Accept: 'application/json',
       },
     });
