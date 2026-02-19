@@ -10,7 +10,7 @@ export default async function handler(req, res) {
   try {
     const url = new URL(req.url, 'http://localhost');
 
-    const redditUrl = `https://api.reddit.com${url.pathname}${url.search}&raw_json=1`;
+    const redditUrl = `https://old.reddit.com${url.pathname}${url.search}`;
 
     console.log('Proxying to:', redditUrl);
 
