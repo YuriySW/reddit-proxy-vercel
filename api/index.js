@@ -1,5 +1,4 @@
 export default async function handler(req, res) {
-  // CORS заголовки (оставляем * для теста)
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'GET, OPTIONS');
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
@@ -9,18 +8,13 @@ export default async function handler(req, res) {
   }
 
   try {
-    // Правильно разбираем URL запроса
-    const url = new URL(req.url, 'https://dummy'); // base не важен, главное — чтобы parse прошёл
+    const url = new URL(req.url, 'https://dummy-base.com');
+    let path = url.pathname + (url.search || '');
 
-    // path — это часть после домена, например /best?page=1 → /best?page=1
-    let path = url.pathname;
+    // Если фронт запрашивает /best?page=1 → Pikabu получит https://pikabu.ru/best?page=1
+    const pikabuUrl = `https://pikabu.ru${path}`;
 
-    // Если хочешь убрать префикс /api/pikabu/ или /proxy/ — раскомментируй и подстрой
-    // path = path.replace(/^\/(api\/)?(pikabu|proxy)\/?/, '/');
-
-    const pikabuUrl = `https://pikabu.ru${path}${url.search || ''}`;
-
-    console.log('Пытаемся проксировать →', pikabuUrl);
+    console.log('Proxying to Pikabu:', pikabuUrl);
 
     const response = await fetch(pikabuUrl, {
       method: req.method,
@@ -28,27 +22,40 @@ export default async function handler(req, res) {
         'User-Agent':
           'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/133.0.0.0 Safari/537.36',
         Accept:
-          'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+          'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8',
         'Accept-Language': 'ru-RU,ru;q=0.9,en-US;q=0.8,en;q=0.7',
+        'Accept-Encoding': 'gzip, deflate, br',
+        Referer: 'https://pikabu.ru/',
+        Connection: 'keep-alive',
+        'Upgrade-Insecure-Requests': '1',
       },
-      redirect: 'follow', // Pikabu иногда редиректит
+      redirect: 'follow',
     });
 
-    const data = await response.text();
+    let data = await response.text();
 
-    // Копируем Content-Type от Pikabu (обычно text/html)
-    const contentType = response.headers.get('content-type');
-    if (contentType) {
-      res.setHeader('Content-Type', contentType);
+    // Фикс кодировки: если Pikabu отдаёт без charset или в windows-1251 — принудительно UTF-8
+    // (редко, но бывает на старых страницах)
+    if (!response.headers.get('content-type')?.includes('charset=')) {
+      data = new TextDecoder('utf-8').decode(new TextEncoder().encode(data));
     }
+
+    // Прокидываем Content-Type и charset
+    const contentType =
+      response.headers.get('content-type') || 'text/html; charset=utf-8';
+    res.setHeader('Content-Type', contentType);
+
+    // Важно: проксируем куки/заголовки, если Pikabu их требует
+    const setCookie = response.headers.get('set-cookie');
+    if (setCookie) res.setHeader('Set-Cookie', setCookie);
 
     res.status(response.status).send(data);
   } catch (err) {
-    console.error('Ошибка в прокси:', err.message || err);
+    console.error('Pikabu proxy error:', err.message, err.stack);
     res.status(500).json({
       error: 'Proxy failed',
-      details: err.message || 'Неизвестная ошибка fetch',
-      url: req.url, // для дебага
+      message: err.message,
+      url: req.url,
     });
   }
 }
