@@ -1,3 +1,5 @@
+const {TextDecoder} = require('util'); // ← добавь это в начало файла (Node.js 11+ имеет встроенный)
+
 export default async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'GET, OPTIONS');
@@ -8,13 +10,12 @@ export default async function handler(req, res) {
   }
 
   try {
-    const url = new URL(req.url, 'https://dummy-base.com');
+    const url = new URL(req.url, 'https://dummy');
     let path = url.pathname + (url.search || '');
 
-    // Если фронт запрашивает /best?page=1 → Pikabu получит https://pikabu.ru/best?page=1
     const pikabuUrl = `https://pikabu.ru${path}`;
 
-    console.log('Proxying to Pikabu:', pikabuUrl);
+    console.log('Proxying to:', pikabuUrl);
 
     const response = await fetch(pikabuUrl, {
       method: req.method,
@@ -26,36 +27,34 @@ export default async function handler(req, res) {
         'Accept-Language': 'ru-RU,ru;q=0.9,en-US;q=0.8,en;q=0.7',
         'Accept-Encoding': 'gzip, deflate, br',
         Referer: 'https://pikabu.ru/',
-        Connection: 'keep-alive',
-        'Upgrade-Insecure-Requests': '1',
       },
       redirect: 'follow',
     });
 
-    let data = await response.text();
+    // Получаем сырые байты (ArrayBuffer)
+    const arrayBuffer = await response.arrayBuffer();
 
-    // Фикс кодировки: если Pikabu отдаёт без charset или в windows-1251 — принудительно UTF-8
-    // (редко, но бывает на старых страницах)
-    if (!response.headers.get('content-type')?.includes('charset=')) {
-      data = new TextDecoder('utf-8').decode(new TextEncoder().encode(data));
+    // Пробуем декодировать как windows-1251 (часто спасает на Pikabu)
+    let decoder = new TextDecoder('windows-1251');
+    let data = decoder.decode(arrayBuffer);
+
+    // Если выглядит как мусор — fallback на UTF-8
+    if (data.includes('�') || data.match(/[^\x00-\x7F]{3,}/) === null) {
+      // грубая проверка на битые символы
+      decoder = new TextDecoder('utf-8');
+      data = decoder.decode(arrayBuffer);
     }
 
-    // Прокидываем Content-Type и charset
-    const contentType =
-      response.headers.get('content-type') || 'text/html; charset=utf-8';
-    res.setHeader('Content-Type', contentType);
+    // Content-Type принудительно с UTF-8, чтобы браузер не путался
+    res.setHeader('Content-Type', 'text/html; charset=utf-8');
 
-    // Важно: проксируем куки/заголовки, если Pikabu их требует
+    // Прокидываем другие заголовки
     const setCookie = response.headers.get('set-cookie');
     if (setCookie) res.setHeader('Set-Cookie', setCookie);
 
     res.status(response.status).send(data);
   } catch (err) {
-    console.error('Pikabu proxy error:', err.message, err.stack);
-    res.status(500).json({
-      error: 'Proxy failed',
-      message: err.message,
-      url: req.url,
-    });
+    console.error('Proxy error:', err.message);
+    res.status(500).json({error: 'Proxy failed', details: err.message});
   }
 }
